@@ -2754,5 +2754,441 @@ resize();
 mainMenu();
 requestAnimationFrame(tick);
 </script>
+ <script>
+"use strict";
+
+/*
+  Ship map add-on.
+  Requires the complete Hidden Impostor game above it.
+*/
+(() => {
+  const mapViews = [];
+
+  const style = document.createElement("style");
+  style.textContent = `
+    .ship-map-button {
+      position: absolute;
+      right: 51px;
+      top: 8px;
+      z-index: 26;
+      height: 36px;
+      padding: 0 10px;
+      border: 1px solid #94a3b8;
+      border-radius: 8px;
+      background: #0f172a;
+      color: white;
+      font-size: 11px;
+      font-weight: 800;
+    }
+
+    .ship-map-overlay {
+      position: absolute;
+      inset: 0;
+      z-index: 40;
+      display: flex;
+      flex-direction: column;
+      padding: 10px;
+      background: rgba(2, 6, 23, .97);
+    }
+
+    .ship-map-overlay[hidden] {
+      display: none;
+    }
+
+    .ship-map-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 8px;
+      flex-shrink: 0;
+    }
+
+    .ship-map-heading {
+      font-weight: 800;
+      font-size: 14px;
+      color: #e2e8f0;
+    }
+
+    .ship-map-close {
+      border: 1px solid #64748b;
+      border-radius: 7px;
+      padding: 6px 11px;
+      background: #334155;
+      color: white;
+      font-weight: bold;
+    }
+
+    .ship-map-caption {
+      margin: 5px 0;
+      color: #fbbf24;
+      font-size: 11px;
+    }
+
+    .ship-map-stage {
+      position: relative;
+      flex: 1;
+      min-height: 0;
+      overflow: hidden;
+    }
+
+    .ship-map-stage canvas {
+      position: absolute;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+    }
+
+    .ship-map-footer {
+      flex-shrink: 0;
+      max-height: 68px;
+      overflow: auto;
+      color: #cbd5e1;
+      font-size: 11px;
+      line-height: 1.5;
+      white-space: pre-line;
+    }
+  `;
+  document.head.append(style);
+
+  views.forEach((view, index) => {
+    // Reserve room for both MAP and pause.
+    view.hud.style.right = "110px";
+
+    const openButton = document.createElement("button");
+    openButton.className = "ship-map-button";
+    openButton.textContent = "MAP";
+    openButton.hidden = true;
+
+    const panel = document.createElement("div");
+    panel.className = "ship-map-overlay";
+    panel.hidden = true;
+
+    const header = document.createElement("div");
+    header.className = "ship-map-header";
+
+    const heading = document.createElement("div");
+    heading.className = "ship-map-heading";
+
+    const closeButton = document.createElement("button");
+    closeButton.className = "ship-map-close";
+    closeButton.textContent = "CLOSE";
+
+    const caption = document.createElement("div");
+    caption.className = "ship-map-caption";
+    caption.textContent =
+      "The game is still running. Other players are not shown.";
+
+    const stage = document.createElement("div");
+    stage.className = "ship-map-stage";
+
+    const canvas = document.createElement("canvas");
+    stage.append(canvas);
+
+    const footer = document.createElement("div");
+    footer.className = "ship-map-footer";
+
+    header.append(heading, closeButton);
+    panel.append(header, caption, stage, footer);
+    view.station.append(openButton, panel);
+
+    const mapView = {
+      panel,
+      canvas,
+      ctx: canvas.getContext("2d"),
+      heading,
+      footer,
+      openButton,
+      owner: null
+    };
+
+    mapViews.push(mapView);
+
+    function closeMap() {
+      if (mapView.owner) {
+        mapView.owner.mapOpen = false;
+      }
+
+      mapView.owner = null;
+      panel.hidden = true;
+    }
+
+    openButton.onclick = () => {
+      const player = humans[index];
+
+      if (!player || state !== "playing") return;
+
+      closePanel(player);
+      player.input = { x: 0, y: 0 };
+
+      view.pointer = null;
+      view.knob.style.transform = "translate(-50%, -50%)";
+
+      player.mapOpen = true;
+      mapView.owner = player;
+      panel.hidden = false;
+
+      drawMap(mapView, player);
+    };
+
+    closeButton.onclick = closeMap;
+    mapView.close = closeMap;
+  });
+
+  /*
+    Freeze only the player consulting their map.
+    The other player, AI, timers, and sabotage keep running.
+  */
+  const normalUpdateHuman = updateHuman;
+
+  updateHuman = function(player, index, dt) {
+    if (player.mapOpen) {
+      player.input = { x: 0, y: 0 };
+      return;
+    }
+
+    normalUpdateHuman(player, index, dt);
+  };
+
+  function drawMap(mapView, player) {
+    const canvas = mapView.canvas;
+    const ctx = mapView.ctx;
+    const bounds = canvas.getBoundingClientRect();
+
+    if (bounds.width < 1 || bounds.height < 1) return;
+
+    const dpr = Math.min(devicePixelRatio || 1, 2);
+    const pixelWidth = Math.round(bounds.width * dpr);
+    const pixelHeight = Math.round(bounds.height * dpr);
+
+    if (
+      canvas.width !== pixelWidth ||
+      canvas.height !== pixelHeight
+    ) {
+      canvas.width = pixelWidth;
+      canvas.height = pixelHeight;
+    }
+
+    const width = bounds.width;
+    const height = bounds.height;
+
+    ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    ctx.clearRect(0, 0, width, height);
+
+    const padding = 12;
+    const scale = Math.min(
+      Math.max(1, width - padding * 2) / WORLD_W,
+      Math.max(1, height - padding * 2) / WORLD_H
+    );
+
+    const offsetX = (width - WORLD_W * scale) / 2;
+    const offsetY = (height - WORLD_H * scale) / 2;
+
+    const sx = x => offsetX + x * scale;
+    const sy = y => offsetY + y * scale;
+
+    // Walkable ship floor and connecting corridors.
+    ctx.fillStyle = "#334155";
+
+    for (let y = 0; y < ROWS; y++) {
+      for (let x = 0; x < COLS; x++) {
+        if (!floor[y][x]) continue;
+
+        ctx.fillRect(
+          sx(x * TILE),
+          sy(y * TILE),
+          TILE * scale + .5,
+          TILE * scale + .5
+        );
+      }
+    }
+
+    // Recognizable room colors and outlines.
+    rooms.forEach(room => {
+      const x = sx(room.x * TILE);
+      const y = sy(room.y * TILE);
+      const w = room.w * TILE * scale;
+      const h = room.h * TILE * scale;
+
+      ctx.fillStyle = room.color;
+      ctx.fillRect(x, y, w, h);
+
+      ctx.strokeStyle = "#94a3b8";
+      ctx.lineWidth = 1;
+      ctx.strokeRect(x, y, w, h);
+
+      ctx.fillStyle = "#e2e8f0";
+      ctx.font = `bold ${width < 400 ? 8 : 10}px system-ui`;
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+
+      ctx.fillText(
+          room.name,
+          x + w / 2,
+          y + Math.min(11, h / 3),
+          Math.max(1, w - 5)
+      );
+    });
+
+    // Furniture silhouettes help relate the map to the game.
+    ctx.fillStyle = "#02061788";
+
+    props.forEach(prop => {
+      ctx.fillRect(
+        sx(prop.x * TILE),
+        sy(prop.y * TILE),
+        prop.w * TILE * scale,
+        prop.h * TILE * scale
+      );
+    });
+
+    // Door sabotage is public ship information.
+    if (sabotage?.type === "doors") {
+      ctx.fillStyle = "#ef4444";
+
+      doors.forEach(door => {
+        ctx.fillRect(
+          sx(door.x * TILE),
+          sy(door.y * TILE),
+          TILE * scale,
+          TILE * scale
+        );
+      });
+    }
+
+    function marker(position, label, fill, radius = 7) {
+      const x = sx(position.x);
+      const y = sy(position.y);
+
+      ctx.beginPath();
+      ctx.arc(x, y, radius, 0, Math.PI * 2);
+      ctx.fillStyle = fill;
+      ctx.fill();
+
+      ctx.strokeStyle = "#020617";
+      ctx.lineWidth = 2;
+      ctx.stroke();
+
+      ctx.fillStyle = "#ffffff";
+      ctx.font = "bold 10px system-ui";
+      ctx.textAlign = "center";
+      ctx.textBaseline = "middle";
+      ctx.fillText(label, x, y);
+    }
+
+    // Only this player's actual task list is shown.
+    const unfinished = player.impostor
+      ? []
+      : player.jobs.filter(job => !job.done);
+
+    unfinished.forEach((job, index) => {
+      marker(job.device, String(index + 1), "#0369a1");
+    });
+
+    marker(emergency, "M", "#b91c1c", 7);
+
+    const repairNotes = [];
+
+    if (sabotage?.type === "lights") {
+      marker(lightsPanel, "!", "#ea580c", 9);
+      repairNotes.push("! Restore lights in Electrical.");
+    }
+
+    if (sabotage?.type === "reactor") {
+      reactorPanels.forEach((position, index) => {
+        if (!sabotage.panels[index]) {
+          marker(position, "!", "#ea580c", 9);
+        }
+      });
+
+      repairNotes.push("! Authorize unfinished Reactor consoles.");
+    }
+
+    // Show the owner's real position, not the watched player's.
+    const px = sx(player.x);
+    const py = sy(player.y);
+    const pulse = 10 + Math.sin(clock * 5) * 2;
+
+    ctx.beginPath();
+    ctx.arc(px, py, pulse, 0, Math.PI * 2);
+    ctx.fillStyle = "#ffffff30";
+    ctx.fill();
+
+    ctx.beginPath();
+    ctx.arc(px, py, 5, 0, Math.PI * 2);
+    ctx.fillStyle = player.color;
+    ctx.fill();
+
+    ctx.strokeStyle = "white";
+    ctx.lineWidth = 2;
+    ctx.stroke();
+
+    ctx.font = "bold 10px system-ui";
+    ctx.textBaseline = "alphabetic";
+
+    // Keep the location label within the canvas.
+    const labelX = Math.max(38, Math.min(width - 38, px));
+    const labelY = py < 30 ? py + 23 : py - 14;
+
+    ctx.lineWidth = 4;
+    ctx.strokeStyle = "#020617";
+    ctx.strokeText("YOU", labelX, labelY);
+    ctx.fillStyle = "white";
+    ctx.fillText("YOU", labelX, labelY);
+
+    mapView.heading.textContent =
+      `${player.name} — ${roomAt(player)}${player.dead ? " · GHOST" : ""}`;
+
+    const taskNotes = unfinished.map(
+      (job, index) => `${index + 1}: ${job.device.name}`
+    );
+
+    mapView.footer.textContent = [
+      "YOU = your position · M = emergency meeting",
+      ...taskNotes,
+      ...repairNotes,
+      player.impostor
+        ? "Impostors have no real tasks."
+        : unfinished.length === 0
+          ? "All your tasks are complete."
+          : "",
+      player.spectating
+        ? "This marker shows your ghost, not the player you were watching."
+        : ""
+    ].filter(Boolean).join("\n");
+  }
+
+  let lastDraw = 0;
+
+  function updateMaps(now) {
+    mapViews.forEach((mapView, index) => {
+      const player = humans[index];
+
+      mapView.openButton.hidden =
+        state !== "playing" ||
+        !player ||
+        index >= humanCount;
+
+      // Close stale maps after death, meetings, restarts, or exit.
+      if (!mapView.panel.hidden) {
+        if (
+          state !== "playing" ||
+          mapView.owner !== player ||
+          !player.mapOpen
+        ) {
+          mapView.close();
+        } else if (now - lastDraw >= 100) {
+          drawMap(mapView, player);
+        }
+      }
+    });
+
+    if (now - lastDraw >= 100) lastDraw = now;
+    requestAnimationFrame(updateMaps);
+  }
+
+  requestAnimationFrame(updateMaps);
+})();
+</script>
+
 </body>
 </html>
