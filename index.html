@@ -1,0 +1,139 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>Surrounded by Impostors</title>
+<style>
+  * { box-sizing: border-box; user-select: none; }
+  body { margin: 0; background: #111; color: white; font-family: system-ui, sans-serif; overflow: hidden; height: 100vh; }
+  
+  /* The split screen container */
+  #game-container {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    width: 100vw;
+  }
+
+  /* Top half for Player 1 */
+  #player1-screen {
+    flex: 1;
+    background: #1a202c;
+    border-bottom: 4px solid #facc15; /* Yellow border for P1 */
+    position: relative;
+    overflow: hidden;
+  }
+
+  /* Bottom half for Player 2 */
+  #player2-screen {
+    flex: 1;
+    background: #1a202c;
+    border-top: 4px solid #3b82f6; /* Blue border for P2 */
+    position: relative;
+    overflow: hidden;
+    transform: rotate(180deg); /* Flips the screen so P2 can sit opposite! */
+  }
+
+  /* Canvas styling */
+  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
+
+  /* Labels */
+  .label {
+    position: absolute;
+    top: 10px;
+    left: 10px;
+    font-weight: bold;
+    font-size: 12px;
+    background: rgba(0,0,0,0.5);
+    padding: 5px 10px;
+    border-radius: 5px;
+    z-index: 10;
+    color: white;
+  }
+</style>
+</head>
+<body>
+
+<div id="game-container">
+  <div id="player1-screen">
+    <div class="label">P1 (WASD)</div>
+    <canvas id="canvas1"></canvas>
+  </div>
+  
+  <div id="player2-screen">
+    <div class="label">P2 (Arrows)</div>
+    <canvas id="canvas2"></canvas>
+  </div>
+</div>
+
+<script>
+  // --- SETUP CANVASES ---
+  const canvas1 = document.getElementById('canvas1');
+  const ctx1 = canvas1.getContext('2d');
+  const canvas2 = document.getElementById('canvas2');
+  const ctx2 = canvas2.getContext('2d');
+
+  function resize() {
+    canvas1.width = canvas1.parentElement.clientWidth;
+    canvas1.height = canvas1.parentElement.clientHeight;
+    canvas2.width = canvas2.parentElement.clientWidth;
+    canvas2.height = canvas2.parentElement.clientHeight;
+  }
+  window.addEventListener('resize', resize);
+  resize();
+
+  // --- PLAYER DATA ---
+  const p1 = { x: 100, y: 100, r: 15, speed: 5, color: '#facc15' }; // Yellow Bean
+  const p2 = { x: 300, y: 100, r: 15, speed: 5, color: '#3b82f6' }; // Blue Bean
+
+  const keys = new Set();
+  window.addEventListener('keydown', e => keys.add(e.key.toLowerCase()));
+  window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+
+  // --- DRAW CHARACTER (The "Bean" Shape) ---
+  function drawCharacter(ctx, player) {
+    // Draw Body
+    ctx.fillStyle = player.color;
+    ctx.beginPath();
+    // A rounded rectangle for the body
+    ctx.roundRect(player.x - player.r, player.y - player.r, player.r * 2, player.r * 2.5, 10);
+    ctx.fill();
+    
+    // Draw Visor
+    ctx.fillStyle = '#bae6fd';
+    ctx.beginPath();
+    ctx.roundRect(player.x + 2, player.y - 10, 12, 8, 4);
+    ctx.fill();
+  }
+
+  // --- GAME LOOP ---
+  function update() {
+    // Move P1 (WASD)
+    if (keys.has('w')) p1.y -= p1.speed;
+    if (keys.has('s')) p1.y += p1.speed;
+    if (keys.has('a')) p1.x -= p1.speed;
+    if (keys.has('d')) p1.x += p1.speed;
+
+    // Move P2 (Arrows)
+    if (keys.has('arrowup')) p2.y -= p2.speed;
+    if (keys.has('arrowdown')) p2.y += p2.speed;
+    if (keys.has('arrowleft')) p2.x -= p2.speed;
+    if (keys.has('arrowright')) p2.x += p2.speed;
+
+    // Clear the screens
+    ctx1.clearRect(0, 0, canvas1.width, canvas1.height);
+    ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
+
+    // Draw the beans
+    drawCharacter(ctx1, p1);
+    drawCharacter(ctx2, p2);
+
+    // Loop the game
+    requestAnimationFrame(update);
+  }
+
+  update();
+</script>
+</body>
+</html>
