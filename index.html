@@ -2,138 +2,1348 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-<title>Surrounded by Impostors</title>
+<meta name="viewport"
+      content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Hidden Impostor</title>
 <style>
-  * { box-sizing: border-box; user-select: none; }
-  body { margin: 0; background: #111; color: white; font-family: system-ui, sans-serif; overflow: hidden; height: 100vh; }
-  
-  /* The split screen container */
-  #game-container {
+  * {
+    box-sizing: border-box;
+    user-select: none;
+    -webkit-user-select: none;
+  }
+  html, body {
+    margin: 0;
+    width: 100%;
+    height: 100%;
+    overflow: hidden;
+    background: #080e19;
+    color: white;
+    font-family: system-ui, sans-serif;
+    overscroll-behavior: none;
+  }
+  button { font: inherit; cursor: pointer; }
+  #game {
     display: flex;
     flex-direction: column;
     height: 100vh;
-    width: 100vw;
+    height: 100dvh;
   }
-
-  /* Top half for Player 1 */
-  #player1-screen {
-    flex: 1;
-    background: #1a202c;
-    border-bottom: 4px solid #facc15; /* Yellow border for P1 */
+  .screen {
     position: relative;
+    flex: 1;
+    min-height: 0;
     overflow: hidden;
   }
-
-  /* Bottom half for Player 2 */
-  #player2-screen {
-    flex: 1;
-    background: #1a202c;
-    border-top: 4px solid #3b82f6; /* Blue border for P2 */
-    position: relative;
-    overflow: hidden;
-    transform: rotate(180deg); /* Flips the screen so P2 can sit opposite! */
-  }
-
-  /* Canvas styling */
-  canvas { display: block; width: 100%; height: 100%; touch-action: none; }
-
-  /* Labels */
-  .label {
+  #screen1 { border-bottom: 3px solid #facc15; }
+  #screen2 { border-top: 3px solid #3b82f6; }
+  .station { position: absolute; inset: 0; }
+  #station2 { transform: rotate(180deg); }
+  canvas { display: block; width: 100%; height: 100%; }
+  .hud {
     position: absolute;
-    top: 10px;
+    top: 8px;
     left: 10px;
-    font-weight: bold;
+    right: 10px;
     font-size: 12px;
-    background: rgba(0,0,0,0.5);
-    padding: 5px 10px;
-    border-radius: 5px;
-    z-index: 10;
+    line-height: 1.45;
+    pointer-events: none;
+    text-shadow: 0 2px 3px black;
+  }
+  .stick {
+    position: absolute;
+    left: 16px;
+    bottom: 16px;
+    width: 86px;
+    height: 86px;
+    border-radius: 50%;
+    background: #ffffff18;
+    border: 2px solid #ffffff66;
+    touch-action: none;
+  }
+  .knob {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    width: 36px;
+    height: 36px;
+    border-radius: 50%;
+    background: #ffffffcc;
+    transform: translate(-50%, -50%);
+    pointer-events: none;
+  }
+  .actions {
+    position: absolute;
+    bottom: 16px;
+    right: 12px;
+    display: flex;
+    gap: 6px;
+  }
+  .actions button {
+    width: 58px;
+    height: 58px;
+    border-radius: 50%;
+    border: 2px solid #ffffff99;
     color: white;
+    font-size: 10px;
+    font-weight: bold;
+    background: #334155;
+    touch-action: manipulation;
+  }
+  .actions button:nth-child(1) { background: #166534; }
+  .actions button:nth-child(2) { background: #991b1b; }
+  .actions button:nth-child(3) { background: #6d28d9; }
+  .actions button:nth-child(4) { background: #a16207; }
+  #overlay {
+    position: fixed;
+    inset: 0;
+    z-index: 100;
+    background: #020617f5;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    padding: 18px;
+  }
+  .dialog {
+    width: min(480px, 100%);
+    max-height: 94vh;
+    overflow: auto;
+    padding: 22px;
+    border-radius: 16px;
+    background: #172033;
+    border: 1px solid #475569;
+    text-align: center;
+  }
+  .dialog h1 { font-size: 25px; margin: 0 0 12px; }
+  .dialog p { color: #cbd5e1; line-height: 1.5; white-space: pre-line; }
+  #choices { display: grid; gap: 7px; }
+  #choices button {
+    padding: 11px;
+    color: white;
+    background: #334155;
+    border: 2px solid #64748b;
+    border-radius: 8px;
+    font-weight: bold;
+  }
+  @media (max-width: 400px) {
+    .actions { gap: 4px; right: 7px; }
+    .actions button { width: 49px; height: 49px; font-size: 9px; }
+    .stick { width: 76px; height: 76px; left: 9px; }
   }
 </style>
 </head>
 <body>
+<div id="game">
+  <section class="screen" id="screen1">
+    <div class="station">
+      <canvas id="canvas1"></canvas>
+      <div class="hud" id="hud1"></div>
+      <div class="stick" id="stick1"><div class="knob"></div></div>
+      <div class="actions">
+        <button data-player="0" data-action="use">USE</button>
+        <button data-player="0" data-action="kill">KILL</button>
+        <button data-player="0" data-action="vent">VENT</button>
+        <button data-player="0" data-action="report">REPORT</button>
+      </div>
+    </div>
+  </section>
+  <section class="screen" id="screen2">
+    <div class="station" id="station2">
+      <canvas id="canvas2"></canvas>
+      <div class="hud" id="hud2"></div>
+      <div class="stick" id="stick2"><div class="knob"></div></div>
+      <div class="actions">
+        <button data-player="1" data-action="use">USE</button>
+        <button data-player="1" data-action="kill">KILL</button>
+        <button data-player="1" data-action="vent">VENT</button>
+        <button data-player="1" data-action="report">REPORT</button>
+      </div>
+    </div>
+  </section>
+</div>
 
-<div id="game-container">
-  <div id="player1-screen">
-    <div class="label">P1 (WASD)</div>
-    <canvas id="canvas1"></canvas>
-  </div>
-  
-  <div id="player2-screen">
-    <div class="label">P2 (Arrows)</div>
-    <canvas id="canvas2"></canvas>
+<div id="overlay">
+  <div class="dialog">
+    <h1 id="title"></h1>
+    <p id="description"></p>
+    <div id="choices"></div>
   </div>
 </div>
 
 <script>
-  // --- SETUP CANVASES ---
-  const canvas1 = document.getElementById('canvas1');
-  const ctx1 = canvas1.getContext('2d');
-  const canvas2 = document.getElementById('canvas2');
-  const ctx2 = canvas2.getContext('2d');
+"use strict";
 
-  function resize() {
-    canvas1.width = canvas1.parentElement.clientWidth;
-    canvas1.height = canvas1.parentElement.clientHeight;
-    canvas2.width = canvas2.parentElement.clientWidth;
-    canvas2.height = canvas2.parentElement.clientHeight;
+/* -------------------- Settings -------------------- */
+
+const T = 48, COLS = 30, ROWS = 20;
+const WIDTH = COLS * T, HEIGHT = ROWS * T;
+const KILL_RANGE = 43, KILL_CD = 18, VENT_CD = 7;
+const TASK_TIME = 7, SIGHT = 300;
+const ROTATE_PLAYER_TWO = true;
+
+// Both modes use eleven total characters.
+const TOTAL_PLAYERS = 11;
+
+let state = "menu";
+let humanCount = 1;
+let people = [], humans = [], bodies = [], tasks = [];
+let elapsed = 0, meetingNumber = 0;
+let announcement = "", announcementTime = 0;
+let reportPending = null;
+let lastTime = performance.now();
+
+const overlay = document.getElementById("overlay");
+const choices = document.getElementById("choices");
+const keys = new Set();
+const canvases = [
+  document.getElementById("canvas1"),
+  document.getElementById("canvas2")
+];
+const contexts = canvases.map(c => c.getContext("2d"));
+
+if (!ROTATE_PLAYER_TWO) {
+  document.getElementById("station2").style.transform = "none";
+}
+
+/* -------------------- UI -------------------- */
+
+function dialog(title, text, buttons) {
+  document.getElementById("title").textContent = title;
+  document.getElementById("description").textContent = text;
+  choices.replaceChildren();
+
+  for (const item of buttons) {
+    const button = document.createElement("button");
+    button.textContent = item.text;
+    if (item.color) button.style.borderColor = item.color;
+    button.onclick = item.action;
+    choices.append(button);
   }
-  window.addEventListener('resize', resize);
+
+  overlay.style.display = "flex";
+}
+
+function hideDialog() {
+  overlay.style.display = "none";
+}
+
+function announce(text, seconds = 5) {
+  announcement = text;
+  announcementTime = seconds;
+}
+
+function resetControls() {
+  keys.clear();
+  for (const human of humans) human.input = { x: 0, y: 0 };
+  document.querySelectorAll(".knob").forEach(knob => {
+    knob.style.transform = "translate(-50%, -50%)";
+  });
+}
+
+function showMenu() {
+  state = "menu";
+  resetControls();
+
+  dialog(
+    "Hidden Impostor",
+    "One hidden Impostor is randomly chosen from ALL eleven characters.\n\n" +
+    "Solo: WASD / arrow keys, or joystick.\n" +
+    "Two players: Yellow uses WASD; Blue uses arrows.\n" +
+    "Both players also have touch controls.",
+    [
+      { text: "Solo — Me + 10 AI", action: () => startRound(1) },
+      { text: "Two players — Us + 9 AI", action: () => startRound(2) }
+    ]
+  );
+}
+
+/* -------------------- Map -------------------- */
+
+const floor = Array.from({ length: ROWS }, () => Array(COLS).fill(false));
+
+const rooms = [
+  { name: "CAFETERIA", x: 2, y: 2, w: 10, h: 6, color: "#293b52" },
+  { name: "NAVIGATION", x: 20, y: 2, w: 8, h: 6, color: "#203f4c" },
+  { name: "MEDBAY", x: 2, y: 12, w: 6, h: 6, color: "#29473f" },
+  { name: "ELECTRICAL", x: 11, y: 12, w: 7, h: 6, color: "#4a3d28" },
+  { name: "SECURITY", x: 21, y: 12, w: 7, h: 6, color: "#3c304b" }
+];
+
+const halls = [
+  { x: 5, y: 8, w: 20, h: 3 },
+  { x: 5, y: 7, w: 3, h: 6 },
+  { x: 13, y: 9, w: 3, h: 4 },
+  { x: 22, y: 7, w: 3, h: 6 }
+];
+
+for (const rect of [...rooms, ...halls]) {
+  for (let y = rect.y; y < rect.y + rect.h; y++) {
+    for (let x = rect.x; x < rect.x + rect.w; x++) {
+      floor[y][x] = true;
+    }
+  }
+}
+
+const taskCells = [
+  [3, 3], [10, 3], [10, 6], [21, 3], [26, 3], [26, 6],
+  [3, 13], [6, 16], [12, 13], [16, 16], [22, 13], [26, 16]
+];
+
+function point(x, y) {
+  return { x: (x + .5) * T, y: (y + .5) * T };
+}
+
+const vents = [
+  { ...point(3, 6), name: "Cafeteria" },
+  { ...point(12, 16), name: "Electrical" },
+  { ...point(26, 13), name: "Security" },
+  { ...point(21, 6), name: "Navigation" }
+];
+
+const walkable = [];
+for (let y = 0; y < ROWS; y++) {
+  for (let x = 0; x < COLS; x++) {
+    if (floor[y][x]) walkable.push(point(x, y));
+  }
+}
+
+function isFloor(x, y) {
+  return x >= 0 && y >= 0 && x < COLS && y < ROWS && floor[y][x];
+}
+
+function cell(p) {
+  return { x: Math.floor(p.x / T), y: Math.floor(p.y / T) };
+}
+
+function dist(a, b) {
+  return Math.hypot(a.x - b.x, a.y - b.y);
+}
+
+function roomAt(p) {
+  const c = cell(p);
+  return rooms.find(r =>
+    c.x >= r.x && c.x < r.x + r.w &&
+    c.y >= r.y && c.y < r.y + r.h
+  )?.name || "HALLWAY";
+}
+
+function randomItem(array) {
+  return array[Math.floor(Math.random() * array.length)];
+}
+
+function closest(from, array) {
+  return array.reduce((best, item) =>
+    !best || dist(from, item) < dist(from, best) ? item : best, null);
+}
+
+function canStand(x, y, r) {
+  if (x - r < 0 || y - r < 0 || x + r > WIDTH || y + r > HEIGHT) {
+    return false;
+  }
+
+  for (let cy = Math.floor((y-r)/T); cy <= Math.floor((y+r)/T); cy++) {
+    for (let cx = Math.floor((x-r)/T); cx <= Math.floor((x+r)/T); cx++) {
+      if (isFloor(cx, cy)) continue;
+
+      const nx = Math.max(cx*T, Math.min(x, (cx+1)*T));
+      const ny = Math.max(cy*T, Math.min(y, (cy+1)*T));
+
+      if (Math.hypot(x-nx, y-ny) < r) return false;
+    }
+  }
+  return true;
+}
+
+function lineOfSight(a, b) {
+  const steps = Math.max(1, Math.ceil(dist(a, b) / 8));
+
+  for (let i = 0; i <= steps; i++) {
+    const t = i / steps;
+    const x = a.x + (b.x-a.x)*t;
+    const y = a.y + (b.y-a.y)*t;
+    if (!isFloor(Math.floor(x/T), Math.floor(y/T))) return false;
+  }
+
+  return true;
+}
+
+function sees(a, b) {
+  return dist(a, b) <= SIGHT && lineOfSight(a, b);
+}
+
+function move(p, dx, dy, dt) {
+  const length = Math.hypot(dx, dy);
+  if (length > 1) { dx /= length; dy /= length; }
+
+  const speed = p.speed * (p.dead ? 1.25 : 1);
+  const mx = dx * speed * dt, my = dy * speed * dt;
+  const steps = Math.max(1, Math.ceil(Math.max(Math.abs(mx), Math.abs(my))/5));
+
+  for (let i = 0; i < steps; i++) {
+    const nx = p.x + mx/steps;
+    const ny = p.y + my/steps;
+
+    if (p.dead) {
+      p.x = Math.max(p.r, Math.min(WIDTH-p.r, nx));
+      p.y = Math.max(p.r, Math.min(HEIGHT-p.r, ny));
+    } else {
+      if (canStand(nx, p.y, p.r)) p.x = nx;
+      if (canStand(p.x, ny, p.r)) p.y = ny;
+    }
+  }
+}
+
+/* -------------------- Navigation -------------------- */
+
+// Breadth-first search is enough for this small, equal-cost grid.
+function findPath(start, destination) {
+  const a = cell(start), b = cell(destination);
+  if (!isFloor(a.x, a.y) || !isFloor(b.x, b.y)) return [];
+
+  const encode = (x, y) => y * COLS + x;
+  const first = encode(a.x, a.y), last = encode(b.x, b.y);
+  const queue = [first];
+  const previous = new Map([[first, null]]);
+  let head = 0;
+
+  while (head < queue.length && !previous.has(last)) {
+    const id = queue[head++];
+    const x = id % COLS, y = Math.floor(id/COLS);
+
+    for (const [dx, dy] of [[1,0],[-1,0],[0,1],[0,-1]]) {
+      const nx = x+dx, ny = y+dy, next = encode(nx, ny);
+      if (!isFloor(nx, ny) || previous.has(next)) continue;
+      previous.set(next, id);
+      queue.push(next);
+    }
+  }
+
+  if (!previous.has(last)) return [];
+
+  const path = [];
+  for (let at = last; at !== null; at = previous.get(at)) {
+    path.push(point(at % COLS, Math.floor(at/COLS)));
+  }
+
+  // Include the starting-cell center to avoid clipping corners.
+  return path.reverse();
+}
+
+function navigate(p, target, dt) {
+  const c = cell(target);
+  const key = `${c.x},${c.y}`;
+
+  if (p.routeKey !== key || p.repath <= 0) {
+    p.path = findPath(p, target);
+    p.routeKey = key;
+    p.repath = .7 + Math.random()*.4;
+  }
+
+  while (p.path.length && dist(p, p.path[0]) < 5) p.path.shift();
+  const next = p.path[0];
+
+  if (next) {
+    const d = dist(p, next);
+    const step = Math.min(d, p.speed*dt);
+    move(p, (next.x-p.x)/d, (next.y-p.y)/d, step/p.speed);
+  }
+}
+
+/* -------------------- Round setup / hidden roles -------------------- */
+
+const palette = [
+  ["Yellow", "#facc15"], ["Blue", "#3b82f6"], ["Purple", "#a855f7"],
+  ["Red", "#ef4444"], ["Green", "#22c55e"], ["Orange", "#fb923c"],
+  ["White", "#e2e8f0"], ["Pink", "#ec4899"], ["Cyan", "#22d3ee"],
+  ["Lime", "#a3e635"], ["Brown", "#a16207"]
+];
+
+function startRound(count) {
+  humanCount = count;
+  elapsed = 0;
+  meetingNumber = 0;
+  bodies = [];
+  reportPending = null;
+
+  tasks = taskCells.map(([x,y], id) => ({
+    ...point(x,y), id, completed: false
+  }));
+
+  people = palette.slice(0, TOTAL_PLAYERS).map(([name,color], id) => ({
+    id, name, color,
+    ...point(3 + id%6, 4 + Math.floor(id/6)),
+    r: 12,
+    human: id < count,
+    impostor: false,
+    dead: false,
+    speed: id < count ? 155 : 112,
+    input: { x: 0, y: 0 },
+    killCD: KILL_CD,
+    ventCD: 0,
+    task: null,
+    progress: 0,
+    goal: null,
+    path: [],
+    routeKey: null,
+    repath: 0,
+    think: 0,
+    lastSeen: null,
+    memory: 0,
+    escape: 0,
+    suspicion: new Map(),
+    witnessed: new Set(),
+    reportAt: 0,
+    boldness: .35 + Math.random()*.5
+  }));
+
+  // Rejection sampling avoids modulo bias.
+  const limit = Math.floor(4294967296 / people.length) * people.length;
+  const random = new Uint32Array(1);
+  do { crypto.getRandomValues(random); } while (random[0] >= limit);
+  people[random[0] % people.length].impostor = true;
+
+  humans = people.filter(p => p.human);
+  document.getElementById("screen2").style.display = count === 2 ? "block" : "none";
   resize();
+  resetControls();
+  revealRole(0);
+}
 
-  // --- PLAYER DATA ---
-  const p1 = { x: 100, y: 100, r: 15, speed: 5, color: '#facc15' }; // Yellow Bean
-  const p2 = { x: 300, y: 100, r: 15, speed: 5, color: '#3b82f6' }; // Blue Bean
+function revealRole(index) {
+  state = "reveal";
+  const p = humans[index];
 
-  const keys = new Set();
-  window.addEventListener('keydown', e => keys.add(e.key.toLowerCase()));
-  window.addEventListener('keyup', e => keys.delete(e.key.toLowerCase()));
+  dialog(
+    `Private check: ${p.name}`,
+    `Only ${p.name}'s player should look now.\nEveryone else: look away.`,
+    [{
+      text: "Reveal my role",
+      action: () => dialog(
+        p.impostor ? "You are the IMPOSTOR" : "You are a CREWMATE",
+        p.impostor
+          ? "Eliminate Crewmates without being caught.\nUse KILL near a victim and VENT near a grate."
+          : "Finish tasks, report bodies, and identify the Impostor.\nDead Crewmates can still finish tasks.",
+        [{
+          text: index+1 < humans.length ? "Hide and pass device" : "Hide and start round",
+          action: () => {
+            if (index+1 < humans.length) revealRole(index+1);
+            else {
+              hideDialog();
+              state = "playing";
+              announce("Stay alert. One of you is the Impostor.");
+            }
+          }
+        }]
+      )
+    }]
+  );
+}
 
-  // --- DRAW CHARACTER (The "Bean" Shape) ---
-  function drawCharacter(ctx, player) {
-    // Draw Body
-    ctx.fillStyle = player.color;
-    ctx.beginPath();
-    // A rounded rectangle for the body
-    ctx.roundRect(player.x - player.r, player.y - player.r, player.r * 2, player.r * 2.5, 10);
-    ctx.fill();
-    
-    // Draw Visor
-    ctx.fillStyle = '#bae6fd';
-    ctx.beginPath();
-    ctx.roundRect(player.x + 2, player.y - 10, 12, 8, 4);
-    ctx.fill();
+/* -------------------- Tasks / killing / vents -------------------- */
+
+function cancelTask(p) {
+  p.task = null;
+  p.progress = 0;
+}
+
+function doTask(p, task, dt) {
+  // Impostors can imitate a task but never add real progress.
+  if (!task || (!p.impostor && task.completed)) {
+    cancelTask(p);
+    return;
   }
 
-  // --- GAME LOOP ---
-  function update() {
-    // Move P1 (WASD)
-    if (keys.has('w')) p1.y -= p1.speed;
-    if (keys.has('s')) p1.y += p1.speed;
-    if (keys.has('a')) p1.x -= p1.speed;
-    if (keys.has('d')) p1.x += p1.speed;
-
-    // Move P2 (Arrows)
-    if (keys.has('arrowup')) p2.y -= p2.speed;
-    if (keys.has('arrowdown')) p2.y += p2.speed;
-    if (keys.has('arrowleft')) p2.x -= p2.speed;
-    if (keys.has('arrowright')) p2.x += p2.speed;
-
-    // Clear the screens
-    ctx1.clearRect(0, 0, canvas1.width, canvas1.height);
-    ctx2.clearRect(0, 0, canvas2.width, canvas2.height);
-
-    // Draw the beans
-    drawCharacter(ctx1, p1);
-    drawCharacter(ctx2, p2);
-
-    // Loop the game
-    requestAnimationFrame(update);
+  if (dist(p, task) > 44) {
+    cancelTask(p);
+    return;
   }
 
-  update();
+  if (p.task !== task) {
+    p.task = task;
+    p.progress = 0;
+  }
+
+  p.progress += dt;
+
+  if (p.progress >= TASK_TIME) {
+    if (!p.impostor) task.completed = true;
+    cancelTask(p);
+    p.goal = null;
+    p.think = 1 + Math.random()*3;
+    if (p.human) announce("Interaction finished.");
+  }
+}
+
+function attemptKill(killer, victim) {
+  if (
+    state !== "playing" || !killer.impostor || killer.dead ||
+    killer.killCD > 0 || !victim || victim.dead ||
+    dist(killer, victim) > KILL_RANGE || !lineOfSight(killer, victim)
+  ) return false;
+
+  // Record knowledge only for living AI that actually sees the kill.
+  for (const observer of people) {
+    if (
+      observer === killer || observer === victim ||
+      observer.human || observer.dead || observer.impostor
+    ) continue;
+
+    if (sees(observer, killer) && sees(observer, victim)) {
+      observer.witnessed.add(killer.id);
+      observer.suspicion.set(killer.id, 100);
+    }
+  }
+
+  bodies.push({
+    x: victim.x,
+    y: victim.y,
+    color: victim.color,
+    name: victim.name,
+    victimId: victim.id
+  });
+
+  victim.dead = true;
+  cancelTask(victim);
+  killer.killCD = KILL_CD;
+  killer.escape = 5;
+  killer.goal = null;
+  killer.lastSeen = null;
+
+  if (victim.human) {
+    announce(`${victim.name} died. Their ghost can move through walls.`);
+  }
+
+  checkWin();
+  return true;
+}
+
+function teleport(p, destination) {
+  p.x = destination.x;
+  p.y = destination.y;
+  p.ventCD = VENT_CD;
+  p.path = [];
+  p.routeKey = null;
+  p.repath = 0;
+  p.goal = null;
+  p.lastSeen = null;
+  cancelTask(p);
+}
+
+function humanAction(index, action) {
+  const p = humans[index];
+  if (!p || state !== "playing") return;
+
+  if (action === "use") {
+    const task = closest(p, tasks.filter(t => !t.completed));
+    if (task && dist(p, task) < 44) {
+      p.task = task;
+      p.progress = 0;
+    } else announce("No unfinished task nearby.");
+  }
+
+  if (action === "kill") {
+    if (p.dead || !p.impostor) return announce("Action unavailable.");
+
+    if (p.killCD > 0) {
+      return announce(`Action cooling down: ${Math.ceil(p.killCD)}s.`);
+    }
+
+    const victim = closest(p, people.filter(q => q !== p && !q.dead));
+    if (!attemptKill(p, victim)) announce("No reachable target nearby.");
+  }
+
+  if (action === "vent") {
+    if (p.dead || !p.impostor) return announce("Action unavailable.");
+    if (p.ventCD > 0) return announce("Vent cooling down.");
+
+    const entrance = closest(p, vents);
+    if (!entrance || dist(p, entrance) > 44) {
+      return announce("Stand next to a vent.");
+    }
+
+    state = "vent";
+    resetControls();
+
+    dialog("Choose a vent", "Movement pauses while choosing.", [
+      ...vents.filter(v => v !== entrance).map(v => ({
+        text: v.name,
+        action: () => {
+          teleport(p, v);
+          state = "playing";
+          hideDialog();
+        }
+      })),
+      {
+        text: "Cancel",
+        action: () => { state = "playing"; hideDialog(); }
+      }
+    ]);
+  }
+
+  if (action === "report") {
+    if (p.dead) return;
+    const body = closest(p, bodies);
+    if (body && dist(p, body) < 80 && lineOfSight(p, body)) {
+      beginMeeting(p);
+    } else announce("No visible body nearby.");
+  }
+}
+
+document.querySelectorAll("[data-action]").forEach(button => {
+  button.onclick = () => humanAction(
+    Number(button.dataset.player),
+    button.dataset.action
+  );
+});
+
+/* -------------------- AI knowledge / behavior -------------------- */
+
+function rememberSuspicion(bot, id, amount) {
+  bot.suspicion.set(id, Math.min(100, (bot.suspicion.get(id) || 0) + amount));
+}
+
+function chooseTaskOrPatrol(bot) {
+  const available = bot.impostor ? tasks : tasks.filter(t => !t.completed);
+  return available.length ? randomItem(available) : randomItem(walkable);
+}
+
+function updateCrewAI(bot, dt) {
+  const visibleBody = closest(bot, bodies.filter(b => sees(bot, b)));
+
+  if (visibleBody) {
+    if (!bot.reportAt) {
+      bot.reportAt = elapsed + .8 + Math.random()*1.2;
+
+      // Being near a body is weak evidence, not proof.
+      for (const other of people) {
+        if (
+          other !== bot && !other.dead &&
+          sees(bot, other) && dist(other, visibleBody) < 90
+        ) rememberSuspicion(bot, other.id, 12);
+      }
+    }
+
+    if (elapsed >= bot.reportAt && !reportPending) {
+      reportPending = bot;
+    }
+    return;
+  }
+
+  bot.reportAt = 0;
+
+  const threat = closest(bot, people.filter(p =>
+    !p.dead && bot.witnessed.has(p.id) && sees(bot, p)
+  ));
+
+  if (threat) {
+    cancelTask(bot);
+
+    if (!bot.goal || dist(bot, bot.goal) < 25 || bot.think <= 0) {
+      const candidates = Array.from({length: 14}, () => randomItem(walkable));
+      bot.goal = candidates.sort((a,b) => dist(b, threat)-dist(a, threat))[0];
+      bot.think = 1.5;
+    }
+
+    navigate(bot, bot.goal, dt);
+    return;
+  }
+
+  if (bot.task) {
+    doTask(bot, bot.task, dt);
+    return;
+  }
+
+  if (bot.think > 0) return;
+
+  if (!bot.goal || bot.goal.completed) bot.goal = chooseTaskOrPatrol(bot);
+
+  if (dist(bot, bot.goal) < 22) {
+    if ("completed" in bot.goal && !bot.goal.completed) {
+      doTask(bot, bot.goal, dt);
+    } else {
+      bot.goal = null;
+      bot.think = 1 + Math.random()*3;
+    }
+  } else navigate(bot, bot.goal, dt);
+}
+
+function updateImpostorAI(bot, dt) {
+  const crew = people.filter(p => p !== bot && !p.dead);
+  const visible = crew.filter(p => sees(bot, p));
+
+  if (bot.escape > 0) {
+    const entrance = closest(bot, vents);
+
+    if (bot.ventCD <= 0 && entrance) {
+      if (dist(bot, entrance) < 28) {
+        // Choose an exit away from currently visible people.
+        const options = vents.filter(v => v !== entrance);
+        options.sort((a,b) => {
+          const score = v => visible.length
+            ? Math.min(...visible.map(p => dist(v,p))) : Math.random()*100;
+          return score(b)-score(a);
+        });
+        teleport(bot, options[0]);
+        bot.escape = 0;
+        bot.think = 2;
+      } else navigate(bot, entrance, dt);
+    } else {
+      if (!bot.goal) bot.goal = randomItem(walkable);
+      navigate(bot, bot.goal, dt);
+    }
+    return;
+  }
+
+  if (bot.killCD <= 0 && visible.length) {
+    cancelTask(bot);
+
+    // Prefer visible, isolated targets. No through-wall tracking.
+    const scored = visible.map(victim => {
+      const witnesses = crew.filter(other =>
+        other !== victim &&
+        dist(other, victim) < SIGHT &&
+        lineOfSight(other, victim) &&
+        lineOfSight(other, bot)
+      ).length;
+
+      return {
+        victim,
+        witnesses,
+        score: dist(bot, victim) + witnesses*280
+      };
+    }).sort((a,b) => a.score-b.score);
+
+    const target = scored[0];
+
+    bot.lastSeen = { x: target.victim.x, y: target.victim.y };
+    bot.memory = 5;
+    bot.goal = null;
+
+    // A witnessed kill is only attempted when the endgame favors it.
+    const desperate = crew.length <= 2;
+    if (target.witnesses === 0 || desperate) {
+      if (attemptKill(bot, target.victim)) return;
+      navigate(bot, bot.lastSeen, dt);
+    } else {
+      // Shadow from a distance instead of standing on the victim.
+      if (dist(bot, target.victim) > 135) {
+        navigate(bot, bot.lastSeen, dt);
+      }
+    }
+    return;
+  }
+
+  if (bot.killCD <= 0 && bot.lastSeen && bot.memory > 0) {
+    navigate(bot, bot.lastSeen, dt);
+    if (dist(bot, bot.lastSeen) < 22) bot.lastSeen = null;
+    return;
+  }
+
+  if (bot.task) {
+    doTask(bot, bot.task, dt);
+    return;
+  }
+
+  if (bot.think > 0) return;
+  if (!bot.goal) bot.goal = chooseTaskOrPatrol(bot);
+
+  if (dist(bot, bot.goal) < 22) {
+    if ("completed" in bot.goal) doTask(bot, bot.goal, dt);
+    else {
+      bot.goal = null;
+      bot.think = 1 + Math.random()*2;
+    }
+  } else navigate(bot, bot.goal, dt);
+}
+
+function updateBot(bot, dt) {
+  if (bot.dead) return;
+  if (bot.impostor) updateImpostorAI(bot, dt);
+  else updateCrewAI(bot, dt);
+}
+
+/* -------------------- Meetings / voting -------------------- */
+
+function beginMeeting(reporter) {
+  if (state !== "playing" || reporter.dead) return;
+
+  state = "meeting";
+  meetingNumber++;
+  reportPending = null;
+  resetControls();
+
+  const witnesses = people.filter(p =>
+    !p.dead && !p.human && p.witnessed.size > 0
+  );
+
+  const claims = witnesses.map(w => {
+    const suspect = people.find(p => w.witnessed.has(p.id));
+    return suspect ? `${w.name}: "I saw ${suspect.name} make a kill."` : "";
+  }).filter(Boolean);
+
+  // NPCs hear testimony, but treat it as weaker than seeing a kill.
+  for (const listener of people.filter(p => !p.dead && !p.human)) {
+    for (const witness of witnesses) {
+      for (const id of witness.witnessed) {
+        if (id !== listener.id) {
+          listener.suspicion.set(id, Math.max(
+            listener.suspicion.get(id) || 0, 68
+          ));
+        }
+      }
+    }
+  }
+
+  const text = `${reporter.name} reported a body.\n\n` +
+    (claims.length ? claims.join("\n") : "Nobody claims to have seen the kill.") +
+    "\n\nA unique leading candidate needs at least two votes. " +
+    "A tie or a leading Skip means no ejection.";
+
+  dialog(`Meeting ${meetingNumber}`, text, [{
+    text: "Begin private voting",
+    action: () => collectVotes()
+  }]);
+}
+
+function aiVote(bot, living) {
+  if (bot.impostor) {
+    // Vote against the most suspicious innocent, or occasionally skip.
+    const candidates = living.filter(p => p !== bot);
+    const ranked = candidates.map(p => ({
+      p,
+      score: people.reduce((total, observer) =>
+        total + (observer.suspicion.get(p.id) || 0), 0)
+    })).sort((a,b) => b.score-a.score);
+
+    if (!ranked.length || Math.random() > bot.boldness) return -1;
+    return ranked[0].p.id;
+  }
+
+  const ranked = living.filter(p => p !== bot).map(p => ({
+    p, score: bot.suspicion.get(p.id) || 0
+  })).sort((a,b) => b.score-a.score);
+
+  if (!ranked.length || ranked[0].score < 55) return -1;
+  return ranked[0].p.id;
+}
+
+function collectVotes() {
+  const living = people.filter(p => !p.dead);
+  const voters = humans.filter(p => !p.dead);
+  const ballots = people.filter(p => !p.human && !p.dead)
+    .map(bot => aiVote(bot, living));
+
+  function next(index) {
+    if (index >= voters.length) return resolveVotes(ballots);
+
+    const voter = voters[index];
+
+    dialog(
+      `${voter.name}: private vote`,
+      "Other players should look away. Your selection is hidden.",
+      [{
+        text: "Ready to vote",
+        action: () => dialog(
+          `${voter.name}, choose`,
+          "Vote using what you observed, or skip.",
+          [
+            ...living.filter(p => p !== voter).map(p => ({
+              text: p.name,
+              color: p.color,
+              action: () => { ballots.push(p.id); next(index+1); }
+            })),
+            {
+              text: "Skip",
+              action: () => { ballots.push(-1); next(index+1); }
+            }
+          ]
+        )
+      }]
+    );
+  }
+
+  next(0);
+}
+
+function resolveVotes(ballots) {
+  const totals = new Map();
+  for (const id of ballots) totals.set(id, (totals.get(id) || 0)+1);
+
+  const ranked = [...totals.entries()].sort((a,b) => b[1]-a[1]);
+  const winner = ranked[0];
+  const tied = winner && ranked[1] && winner[1] === ranked[1][1];
+  let result = "Nobody was ejected.";
+
+  if (winner && !tied && winner[0] !== -1 && winner[1] >= 2) {
+    const ejected = people.find(p => p.id === winner[0]);
+    if (ejected) {
+      ejected.dead = true;
+      cancelTask(ejected);
+      result = `${ejected.name} was ejected.`;
+      // No role reveal until the round ends.
+    }
+  }
+
+  const summary = ranked.map(([id,count]) =>
+    `${id === -1 ? "Skip" : people.find(p => p.id === id).name}: ${count}`
+  ).join("\n");
+
+  dialog("Voting results", `${result}\n\n${summary}`, [{
+    text: "Continue",
+    action: () => {
+      bodies = [];
+      reportPending = null;
+
+      // Resume from Cafeteria; retain completed tasks and evidence.
+      people.forEach((p, index) => {
+        Object.assign(p, point(3+index%6, 4+Math.floor(index/6)));
+        p.goal = null;
+        p.path = [];
+        p.routeKey = null;
+        p.reportAt = 0;
+        p.lastSeen = null;
+        p.escape = 0;
+        p.killCD = Math.max(p.killCD, 8);
+        cancelTask(p);
+      });
+
+      hideDialog();
+      state = "playing";
+      checkWin();
+    }
+  }]);
+}
+
+/* -------------------- Victory -------------------- */
+
+function checkWin() {
+  if (state !== "playing") return;
+
+  const impostor = people.find(p => p.impostor);
+  const livingCrew = people.filter(p => !p.impostor && !p.dead).length;
+
+  let result = null;
+  if (impostor.dead) result = "Crewmates win — the Impostor was ejected!";
+  else if (tasks.every(t => t.completed)) result = "Crewmates win — all tasks finished!";
+  else if (livingCrew <= 1) result = "Impostor wins — too few Crewmates remain!";
+
+  if (!result) return;
+
+  state = "ended";
+  resetControls();
+
+  dialog(
+    result,
+    `${impostor.name} was the Impostor.\nRoles will be randomized again next round.`,
+    [
+      { text: "Play again", action: () => startRound(humanCount) },
+      { text: "Change mode", action: showMenu }
+    ]
+  );
+}
+
+/* -------------------- Human input -------------------- */
+
+function setupStick(index) {
+  const base = document.getElementById(`stick${index+1}`);
+  const knob = base.querySelector(".knob");
+  let pointer = null;
+
+  function update(event) {
+    if (event.pointerId !== pointer) return;
+    const p = humans[index];
+    if (!p || state !== "playing") return;
+
+    const rect = base.getBoundingClientRect();
+    let dx = event.clientX-(rect.left+rect.width/2);
+    let dy = event.clientY-(rect.top+rect.height/2);
+
+    // The second control station is rotated with its canvas.
+    if (index === 1 && ROTATE_PLAYER_TWO) { dx = -dx; dy = -dy; }
+
+    const max = 27, length = Math.hypot(dx,dy);
+    if (length > max) { dx *= max/length; dy *= max/length; }
+
+    p.input = { x: dx/max, y: dy/max };
+    knob.style.transform =
+      `translate(calc(-50% + ${dx}px), calc(-50% + ${dy}px))`;
+  }
+
+  base.addEventListener("pointerdown", event => {
+    if (state !== "playing" || pointer !== null) return;
+    pointer = event.pointerId;
+    base.setPointerCapture(pointer);
+    update(event);
+  });
+
+  base.addEventListener("pointermove", update);
+
+  function release(event) {
+    if (event.pointerId !== pointer) return;
+    pointer = null;
+    if (humans[index]) humans[index].input = { x: 0, y: 0 };
+    knob.style.transform = "translate(-50%, -50%)";
+  }
+
+  base.addEventListener("pointerup", release);
+  base.addEventListener("pointercancel", release);
+  base.addEventListener("lostpointercapture", release);
+}
+
+setupStick(0);
+setupStick(1);
+
+window.addEventListener("keydown", event => {
+  if (["ArrowUp","ArrowDown","ArrowLeft","ArrowRight","Space"].includes(event.code)) {
+    event.preventDefault();
+  }
+  if (state === "playing") keys.add(event.code);
+});
+
+window.addEventListener("keyup", event => keys.delete(event.code));
+window.addEventListener("blur", resetControls);
+document.addEventListener("visibilitychange", () => {
+  if (document.hidden) resetControls();
+});
+
+function updateHuman(p, index, dt) {
+  let dx = p.input.x, dy = p.input.y;
+
+  if (index === 0) {
+    dx += Number(keys.has("KeyD"))-Number(keys.has("KeyA"));
+    dy += Number(keys.has("KeyS"))-Number(keys.has("KeyW"));
+  }
+
+  if (index === 1 || humanCount === 1) {
+    let ax = Number(keys.has("ArrowRight"))-Number(keys.has("ArrowLeft"));
+    let ay = Number(keys.has("ArrowDown"))-Number(keys.has("ArrowUp"));
+
+    if (index === 1 && ROTATE_PLAYER_TWO) { ax = -ax; ay = -ay; }
+    dx += ax; dy += ay;
+  }
+
+  if (Math.hypot(dx,dy) > .08) {
+    cancelTask(p);
+    move(p, dx, dy, dt);
+  } else if (p.task) {
+    doTask(p, p.task, dt);
+  }
+}
+
+/* -------------------- Rendering -------------------- */
+
+function resize() {
+  const dpr = Math.min(window.devicePixelRatio || 1, 2);
+
+  canvases.forEach(canvas => {
+    const rect = canvas.getBoundingClientRect();
+    canvas.width = Math.round(rect.width*dpr);
+    canvas.height = Math.round(rect.height*dpr);
+  });
+}
+
+window.addEventListener("resize", resize);
+
+function drawMap(ctx) {
+  ctx.fillStyle = "#111c2c";
+  ctx.fillRect(0,0,WIDTH,HEIGHT);
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (!floor[y][x]) continue;
+      ctx.fillStyle = "#344155";
+      ctx.fillRect(x*T,y*T,T,T);
+    }
+  }
+
+  for (const room of rooms) {
+    ctx.fillStyle = room.color;
+    ctx.fillRect(room.x*T,room.y*T,room.w*T,room.h*T);
+    ctx.fillStyle = "#ffffff55";
+    ctx.font = "bold 18px system-ui";
+    ctx.textAlign = "center";
+    ctx.fillText(
+      room.name,
+      (room.x+room.w/2)*T,
+      (room.y+room.h/2)*T
+    );
+  }
+
+  ctx.strokeStyle = "#ffffff08";
+  ctx.lineWidth = 1;
+
+  for (let y = 0; y < ROWS; y++) {
+    for (let x = 0; x < COLS; x++) {
+      if (floor[y][x]) ctx.strokeRect(x*T,y*T,T,T);
+    }
+  }
+
+  for (const task of tasks) {
+    ctx.fillStyle = task.completed ? "#166534" : "#facc15";
+    ctx.fillRect(task.x-9,task.y-9,18,18);
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(task.x-5,task.y-5,10,7);
+  }
+
+  for (const vent of vents) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(vent.x-18,vent.y-12,36,24);
+    ctx.strokeStyle = "#94a3b8";
+    ctx.lineWidth = 2;
+    ctx.strokeRect(vent.x-18,vent.y-12,36,24);
+
+    for (let i = -10; i <= 10; i += 5) {
+      ctx.beginPath();
+      ctx.moveTo(vent.x+i,vent.y-8);
+      ctx.lineTo(vent.x+i,vent.y+8);
+      ctx.stroke();
+    }
+  }
+}
+
+function drawBody(ctx, body) {
+  ctx.fillStyle = body.color;
+  ctx.beginPath();
+  ctx.ellipse(body.x,body.y+7,16,10,0,0,Math.PI*2);
+  ctx.fill();
+  ctx.fillStyle = "white";
+  ctx.fillRect(body.x-3,body.y-7,6,14);
+}
+
+function drawPerson(ctx, p, viewer) {
+  if (p.dead && !viewer.dead && p !== viewer) return;
+
+  ctx.save();
+  if (p.dead) ctx.globalAlpha = .45;
+
+  ctx.fillStyle = "#00000044";
+  ctx.beginPath();
+  ctx.ellipse(p.x,p.y+15,15,6,0,0,Math.PI*2);
+  ctx.fill();
+
+  ctx.fillStyle = p.color;
+  ctx.beginPath();
+  ctx.ellipse(p.x,p.y,13,18,0,0,Math.PI*2);
+  ctx.fill();
+
+  if (!p.dead) {
+    ctx.fillRect(p.x-11,p.y+9,8,13);
+    ctx.fillRect(p.x+3,p.y+9,8,13);
+  }
+
+  ctx.fillStyle = "#bae6fd";
+  ctx.fillRect(p.x+1,p.y-10,12,9);
+  ctx.strokeStyle = "#0f172a";
+  ctx.lineWidth = 2;
+  ctx.strokeRect(p.x+1,p.y-10,12,9);
+
+  ctx.fillStyle = "white";
+  ctx.font = "bold 11px system-ui";
+  ctx.textAlign = "center";
+  ctx.fillText(p.name+(p.dead ? " 👻" : ""),p.x,p.y-25);
+
+  // Show that someone is interacting, never whether it is a real task.
+  if (p.task) {
+    ctx.fillStyle = "#0f172a";
+    ctx.fillRect(p.x-17,p.y-36,34,5);
+    ctx.fillStyle = "#22c55e";
+    ctx.fillRect(p.x-17,p.y-36,34*Math.min(1,p.progress/TASK_TIME),5);
+  }
+
+  ctx.restore();
+}
+
+function renderView(index) {
+  const viewer = humans[index];
+  if (!viewer) return;
+
+  const canvas = canvases[index], ctx = contexts[index];
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+
+  const dpr = canvas.width/rect.width;
+  const zoom = .85;
+  const w = rect.width, h = rect.height;
+
+  ctx.setTransform(dpr,0,0,dpr,0,0);
+  ctx.clearRect(0,0,w,h);
+  ctx.fillStyle = "#080e19";
+  ctx.fillRect(0,0,w,h);
+
+  ctx.save();
+  ctx.translate(w/2,h/2);
+  ctx.scale(zoom,zoom);
+  ctx.translate(-viewer.x,-viewer.y);
+
+  drawMap(ctx);
+
+  for (const body of bodies) {
+    if (viewer.dead || sees(viewer,body)) drawBody(ctx,body);
+  }
+
+  const sorted = [...people].sort((a,b) => a.y-b.y);
+  for (const p of sorted) {
+    if (p === viewer || viewer.dead || sees(viewer,p)) {
+      drawPerson(ctx,p,viewer);
+    }
+  }
+
+  ctx.restore();
+
+  const done = tasks.filter(t => t.completed).length;
+  const alive = people.filter(p => !p.dead).length;
+
+  // Never put the hidden role or an Impostor-only cooldown in the HUD.
+  document.getElementById(`hud${index+1}`).textContent =
+    `${viewer.name}${viewer.dead ? " — GHOST" : ""} | ${roomAt(viewer)} | ` +
+    `Tasks ${done}/${tasks.length} | Alive ${alive}\n` +
+    (announcementTime > 0 ? announcement : "Move to explore. USE near a task.");
+}
+
+/* -------------------- Game loop -------------------- */
+
+function tick(now) {
+  const dt = Math.min((now-lastTime)/1000,.05);
+  lastTime = now;
+
+  if (state === "playing") {
+    elapsed += dt;
+    announcementTime = Math.max(0,announcementTime-dt);
+    reportPending = null;
+
+    for (const p of people) {
+      p.killCD = Math.max(0,p.killCD-dt);
+      p.ventCD = Math.max(0,p.ventCD-dt);
+      p.repath -= dt;
+      p.think -= dt;
+      p.escape = Math.max(0,p.escape-dt);
+      p.memory = Math.max(0,p.memory-dt);
+    }
+
+    humans.forEach((p,index) => updateHuman(p,index,dt));
+
+    for (const bot of people.filter(p => !p.human)) {
+      if (state !== "playing") break;
+      updateBot(bot,dt);
+    }
+
+    if (state === "playing" && reportPending && !reportPending.dead) {
+      beginMeeting(reportPending);
+    }
+
+    checkWin();
+  }
+
+  if (humans.length) {
+    renderView(0);
+    if (humanCount === 2) renderView(1);
+  }
+
+  requestAnimationFrame(tick);
+}
+
+resize();
+showMenu();
+requestAnimationFrame(tick);
 </script>
 </body>
 </html>
